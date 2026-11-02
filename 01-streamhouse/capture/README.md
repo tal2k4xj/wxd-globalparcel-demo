@@ -31,8 +31,8 @@ python -m capture.produce
 Open [Kafka UI](http://localhost:8085) or consume like `cqlsh` (after produce is running — that is when topics exist):
 
 ```bash
-docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
-docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+podman compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
+podman compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server kafka:29092 --topic parcel.events --from-beginning
 ```
 

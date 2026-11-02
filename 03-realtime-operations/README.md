@@ -66,7 +66,7 @@ flowchart LR
 From **`01-streamhouse/`** (Compose still up):
 
 ```bash
-docker compose exec -T cassandra cqlsh -e "SELECT COUNT(*) FROM globalparcel_ops.parcel_events_by_parcel;"
+podman compose exec -T cassandra cqlsh -e "SELECT COUNT(*) FROM globalparcel_ops.parcel_events_by_parcel;"
 curl -s "http://localhost:9200/parcel-events-live/_count"
 ```
 
@@ -137,7 +137,7 @@ Example notes:
 
 ```bash
 # from 01-streamhouse/
-docker compose exec -T cassandra cqlsh <<'EOF'
+podman compose exec -T cassandra cqlsh <<'EOF'
 USE globalparcel_ops;
 SELECT parcel_id, event_ts, status, hub_code, region, delivery_note
 FROM parcel_events_by_parcel

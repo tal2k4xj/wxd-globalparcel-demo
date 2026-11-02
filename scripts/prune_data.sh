@@ -10,8 +10,11 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_DIR="${REPO}/01-streamhouse"
 DATA_DIR="${COMPOSE_DIR}/data"
 
+# podman-compose prints a provider banner on every call; silence it.
+export PODMAN_COMPOSE_WARNING_LOGS=false
+
 compose() {
-  docker compose -f "${COMPOSE_DIR}/docker-compose.yml" --project-directory "$COMPOSE_DIR" "$@"
+  podman compose -f "${COMPOSE_DIR}/docker-compose.yml" "$@"
 }
 
 topics=(

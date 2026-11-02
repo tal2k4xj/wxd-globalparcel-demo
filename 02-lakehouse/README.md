@@ -84,6 +84,7 @@ Run the readiness script first:
 Create the local cluster:
 
 ```bash
+export KIND_EXPERIMENTAL_PROVIDER=podman   # Kind nodes run on Podman
 kind create cluster --name wxd
 kubectl config use-context kind-wxd
 ```
@@ -244,7 +245,7 @@ Register that broker as a watsonx.data catalog so Presto can JOIN Iceberg histor
 1. Navigate to **Infrastructure manager → Add component → Apache Kafka**.
 2. Fields:
    - Display name: `kafka-01`
-   - Hostname: run `hostname -I | awk '{print $1}'` (this was set when you started compose)
+   - Hostname: run `ipconfig getifaddr en0` on macOS (`hostname -I | awk '{print $1}'` on Linux) — the same `KAFKA_HOST_IP` you set when you started compose
    - Port: `9092`
    - SASL: off (PLAINTEXT, no username or password)
 3. Click **Test connection**.
@@ -311,13 +312,13 @@ Next: the same scans on the **ledger** and **customer search** — [`../03-realt
 ### Stop or resume local cluster
 
 ```bash
-docker stop wxd-control-plane
-docker start wxd-control-plane
+podman stop wxd-control-plane
+podman start wxd-control-plane
 ```
 
 ### Tear down
 
 ```bash
-kind delete cluster --name wxd
-docker system prune -a      # destructive; removes unused Docker data
+KIND_EXPERIMENTAL_PROVIDER=podman kind delete cluster --name wxd
+podman system prune -a      # destructive; removes unused Podman data
 ```

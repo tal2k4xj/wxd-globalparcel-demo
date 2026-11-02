@@ -27,24 +27,25 @@ pip install -r requirements.txt
 
 ```bash
 # When watsonx.data (Kind) must reach this broker, advertise a host IP Kind can route to:
-export KAFKA_HOST_IP=$(hostname -I | awk '{print $1}')   # Linux; try 172.17.0.1 if Kind still fails
-docker compose up -d
-docker compose ps
+export KAFKA_HOST_IP=$(ipconfig getifaddr en0)            # macOS; on Linux: $(hostname -I | awk '{print $1}')
+export PODMAN_COMPOSE_WARNING_LOGS=false                  # hide podman-compose's provider banner
+podman compose up -d
+podman compose ps
 ```
 
 **Engines started in this chapter:**
 
-- **Apache Kafka** (message bus; powered by Docker Compose)
+- **Apache Kafka** (message bus; powered by Podman Compose)
 - **Apache Cassandra** (authoritative parcel ledger)
 - **OpenSearch** (customer tracking & search)
 - **Kafka UI** (web interface at [http://localhost:8085](http://localhost:8085))
 
-Wait until **Cassandra** is `healthy` (first boot 1–2 minutes), **OpenSearch** answers on HTTP `:9200`, and **Kafka** is `healthy` on `:9092`:
+Containers run on **Podman** (`podman machine start` first on macOS). Wait until **Cassandra** is `healthy` (first boot 1–2 minutes), **OpenSearch** answers on HTTP `:9200`, and **Kafka** is `healthy` on `:9092`:
 
 ```bash
-docker compose exec cassandra nodetool status
+podman compose exec cassandra nodetool status
 curl -s http://localhost:9200
-docker compose exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092
+podman compose exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092
 ```
 
 Then put the business on the bus (**blocks** — keep this terminal open):
@@ -60,7 +61,7 @@ This creates the topics and streams live scans (`PCL-LIVE-…`) plus fuel surcha
 ```bash
 cd 01-streamhouse
 source ../.venv/bin/activate
-docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
+podman compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
 ```
 
 You should see `parcel.events`, `fuel.surcharge`, and the downstream topics the transform will write (`parcel.events.enriched`, `parcel.current`, `ops.sla.alerts`). Kafka UI at [http://localhost:8085](http://localhost:8085) shows the same.
@@ -132,6 +133,6 @@ Details: [`apps/README.md`](apps/README.md). Next: query this business in watson
 Ctrl+C the Python processes, then from this folder:
 
 ```bash
-docker compose down
+podman compose down
 rm -rf data/
 ```

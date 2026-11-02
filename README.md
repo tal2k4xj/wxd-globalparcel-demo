@@ -85,12 +85,12 @@ Suggested parcel: `PCL-LIVE-000001`.
 
 ## Prerequisites
 
-- Docker (or Podman) with Compose
+- Podman with Compose (`podman compose`; on macOS a running `podman machine` with ~24 GB RAM)
 - Python **3.11+**
 - For chapter 02: **kind**, **kubectl**, **helm** (watsonx.data Developer Edition) — see [container-fundamentals](https://github.com/michelderu/container-fundamentals)
 - For chapter 04: watsonx Orchestrate ADK credentials (16 GB RAM recommended)
 
-Start at **[`01-streamhouse/README.md`](01-streamhouse/README.md)**, then `02` → `03` → `04`. Several steps **block** the shell — open a **new terminal** for the next command and run that chapter’s `source ../.venv/bin/activate` again; a fresh shell does not inherit the previous one.
+Start at **[`01-streamhouse/README.md`](01-streamhouse/README.md)**, then `02` → `03` → `04`. All container commands use `podman` / `podman compose`; Kind uses `KIND_EXPERIMENTAL_PROVIDER=podman`. Several steps **block** the shell — open a **new terminal** for the next command and run that chapter’s `source ../.venv/bin/activate` again; a fresh shell does not inherit the previous one.
 
 
 ## Quick start (after running through the whole lab once)

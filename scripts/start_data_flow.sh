@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start the StreamHouse data flow (blocking jobs in the background):
 #   capture.produce → transform.shift_left → tableflow.materialize
-# Prerequisites: Compose up (./scripts/start_services.sh or docker compose in 01-streamhouse).
+# Prerequisites: Compose up (./scripts/start_services.sh or podman compose in 01-streamhouse).
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,8 +19,11 @@ die() { printf '✗ %s\n' "$*" >&2; exit 1; }
 
 [[ -f "$VENV_ACTIVATE" ]] || die "Missing ${REPO}/.venv — create it first (see 01-streamhouse/README.md)"
 
+# podman-compose prints a provider banner on every call; silence it.
+export PODMAN_COMPOSE_WARNING_LOGS=false
+
 compose() {
-  docker compose -f "${COMPOSE_DIR}/docker-compose.yml" --project-directory "$COMPOSE_DIR" "$@"
+  podman compose -f "${COMPOSE_DIR}/docker-compose.yml" "$@"
 }
 
 if ! compose exec -T kafka \

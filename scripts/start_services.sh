@@ -58,8 +58,11 @@ background() {
   fi
 }
 
+# podman-compose prints a provider banner on every call; silence it.
+export PODMAN_COMPOSE_WARNING_LOGS=false
+
 compose() {
-  docker compose -f "${COMPOSE_DIR}/docker-compose.yml" --project-directory "$COMPOSE_DIR" "$@"
+  podman compose -f "${COMPOSE_DIR}/docker-compose.yml" "$@"
 }
 
 find_wxd_installer_dir() {
@@ -96,7 +99,7 @@ extract_wxd_installer_if_needed() {
 }
 
 # --- prerequisites ------------------------------------------------------------
-need_cmd docker
+need_cmd podman
 need_cmd python3
 need_cmd curl
 
@@ -119,7 +122,9 @@ ok "01 requirements installed"
 
 # --- 01 Compose ---------------------------------------------------------------
 if [[ -z "${KAFKA_HOST_IP:-}" ]]; then
-  KAFKA_HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  # Linux: hostname -I; macOS: primary interface address.
+  KAFKA_HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  [[ -n "$KAFKA_HOST_IP" ]] || KAFKA_HOST_IP="$(ipconfig getifaddr en0 2>/dev/null || true)"
   KAFKA_HOST_IP="${KAFKA_HOST_IP:-localhost}"
   export KAFKA_HOST_IP
 fi
@@ -127,7 +132,7 @@ fi
 note "== 01 StreamHouse Compose (KAFKA_HOST_IP=${KAFKA_HOST_IP}) =="
 (
   cd "$COMPOSE_DIR"
-  docker compose up -d
+  podman compose up -d
 )
 
 note "Waiting for Kafka, Cassandra, OpenSearch…"
@@ -170,6 +175,8 @@ fi
 
 # --- 02 watsonx.data ----------------------------------------------------------
 note "== 02 watsonx.data (Kind + Helm) =="
+# Kind runs its node containers on Podman.
+export KIND_EXPERIMENTAL_PROVIDER=podman
 wxd_ui="skipped"
 wxd_installer=""
 
@@ -180,9 +187,10 @@ else
     note "Creating Kind cluster ${KIND_CLUSTER}…"
     kind create cluster --name "$KIND_CLUSTER"
   else
-    mapfile -t kind_nodes < <(docker ps -aq --filter "label=io.x-k8s.kind.cluster=${KIND_CLUSTER}" 2>/dev/null || true)
-    if ((${#kind_nodes[@]})); then
-      docker start "${kind_nodes[@]}" >/dev/null 2>&1 || true
+    kind_nodes="$(podman ps -aq --filter "label=io.x-k8s.kind.cluster=${KIND_CLUSTER}" 2>/dev/null || true)"
+    if [[ -n "$kind_nodes" ]]; then
+      # shellcheck disable=SC2086
+      podman start $kind_nodes >/dev/null 2>&1 || true
     fi
     ok "Kind cluster ${KIND_CLUSTER} present"
   fi
