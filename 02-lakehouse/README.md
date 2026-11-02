@@ -316,6 +316,19 @@ podman stop wxd-control-plane
 podman start wxd-control-plane
 ```
 
+> [!NOTE]
+> **macOS installer app:** it runs everything in its own Podman machine `podman-wxd` and names the cluster `kind-wxd` (node `kind-wxd-control-plane`, context `kind-kind-wxd`). Use those names above, and `export KIND_CLUSTER_NAME=kind-wxd` before `./scripts/start_services.sh`. Only one Podman machine can run at a time on macOS, so run chapter 01 Compose in `podman-wxd` too.
+
+After a Podman machine restart (macOS):
+
+```bash
+podman machine start podman-wxd
+podman start kind-wxd-control-plane
+# wait until `kubectl get pods -n wxd` shows Running, then:
+kubectl -n wxd rollout restart deployment/ibm-lh-presto   # otherwise Presto starts without its MinIO credentials: "Catalog iceberg_data does not exist"
+nohup kubectl port-forward -n wxd service/lhconsole-ui-svc 6443:443 2>&1 &
+```
+
 ### Tear down
 
 ```bash

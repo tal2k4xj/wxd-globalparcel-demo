@@ -123,8 +123,11 @@ def append_records(table: str, records: list[dict[str, Any]]) -> int:
         return 0
     dest = table_dir(table)
     dest.mkdir(parents=True, exist_ok=True)
-    path = dest / f"part-{time.time_ns()}.parquet"
-    pq.write_table(_to_arrow(records, TABLE_FIELDS[table]), path)
+    name = f"part-{time.time_ns()}.parquet"
+    # Write under a temp name, then rename: readers globbing *.parquet never see a half-written file.
+    tmp = dest / f".{name}.tmp"
+    pq.write_table(_to_arrow(records, TABLE_FIELDS[table]), tmp)
+    tmp.replace(dest / name)
     return len(records)
 
 
@@ -144,5 +147,14 @@ def scan_arrow(table: str) -> pa.Table:
     if not files:
         fields = TABLE_FIELDS.get(table, EVENT_FIELDS)
         return pa.table({name: pa.array([], type=_ARROW_FIELDS[name]) for name in fields})
-    tables = [pq.read_table(path) for path in files]
+    tables = []
+    for path in files:
+        try:
+            tables.append(pq.read_table(path))
+        except FileNotFoundError:
+            # overwrite_records() removed it between glob and read.
+            continue
+    if not tables:
+        fields = TABLE_FIELDS.get(table, EVENT_FIELDS)
+        return pa.table({name: pa.array([], type=_ARROW_FIELDS[name]) for name in fields})
     return pa.concat_tables(tables, promote_options="default")
