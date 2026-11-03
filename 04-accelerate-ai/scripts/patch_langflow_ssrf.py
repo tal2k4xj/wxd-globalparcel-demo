@@ -11,6 +11,7 @@ and adds LANGFLOW_SSRF_PROTECTION_ENABLED. `scripts/start_wxo.sh` points
 from __future__ import annotations
 
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -41,6 +42,73 @@ def _stock_compose() -> Path:
     if not path.is_file():
         raise SystemExit(f"ADK compose file not found: {path}")
     return path
+
+
+def absolutize_paths(text: str, stock_dir: Path) -> str:
+    """The copy lives in .adk/, so point build contexts and bind mounts
+    (`context: ./minio`, `- ./sdk:/packages`) back at the ADK's resource folder."""
+    text = re.sub(
+        r"^([ \t]+context:[ \t]+)\./(\S+)",
+        lambda m: f"{m.group(1)}{stock_dir / m.group(2)}",
+        text,
+        flags=re.M,
+    )
+    return re.sub(
+        r"^([ \t]+-[ \t]+)\./([^:\s]+):",
+        lambda m: f"{m.group(1)}{stock_dir / m.group(2)}:",
+        text,
+        flags=re.M,
+    )
+
+
+def native_minio_builder(text: str, stock_dir: Path, dest_dir: Path) -> str:
+    """Dockerfile.minio compiles MinIO in an amd64 Go stage; on Apple Silicon that
+    runs under emulation and the Go compiler crashes. Copy the build context into
+    .adk/minio with the builder on the native platform (GOARCH=amd64 still
+    cross-compiles an amd64 binary), and point the compose copy at it."""
+    src = stock_dir / "minio"
+    dockerfile = src / "Dockerfile.minio"
+    if not dockerfile.is_file():
+        return text
+    dst = dest_dir / "minio"
+    shutil.rmtree(dst, ignore_errors=True)
+    shutil.copytree(src, dst)
+    df = dst / "Dockerfile.minio"
+    df.write_text(
+        re.sub(
+            r"^FROM --platform=linux/amd64 (golang:\S+ AS builder)",
+            r"FROM --platform=$BUILDPLATFORM \1",
+            df.read_text(encoding="utf-8"),
+            flags=re.M,
+        ),
+        encoding="utf-8",
+    )
+    return text.replace(f"context: {src}\n", f"context: {dst}\n")
+
+
+ENABLED_PROFILES = {"langflow"}  # start_wxo.sh runs --with-langflow
+
+
+def drop_optional_disabled_deps(text: str) -> str:
+    """podman-compose ignores `required: false` in depends_on and crashes
+    (KeyError) when the target sits in a profile that is not enabled
+    (e.g. wxo-opensearch-knowledge, langfuse-worker). Drop just those entries."""
+    import yaml
+
+    services = yaml.safe_load(text).get("services", {})
+    off = {
+        name
+        for name, svc in services.items()
+        if svc.get("profiles") and not set(svc["profiles"]) & ENABLED_PROFILES
+    }
+    for target in off:
+        text = re.sub(
+            rf"^([ \t]+){re.escape(target)}:\n\1[ \t]+condition:.*\n\1[ \t]+required:[ \t]*[Ff]alse[ \t]*\n",
+            "",
+            text,
+            flags=re.M,
+        )
+    return text
 
 
 def patched_compose_text(stock: str) -> str:
@@ -81,8 +149,13 @@ def main() -> int:
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     stock_path = _stock_compose()
-    dest.write_text(
+    text = absolutize_paths(
         patched_compose_text(stock_path.read_text(encoding="utf-8")),
+        stock_path.parent,
+    )
+    text = drop_optional_disabled_deps(text)
+    dest.write_text(
+        native_minio_builder(text, stock_path.parent, dest_dir),
         encoding="utf-8",
     )
     print(f"wrote: {dest}")
