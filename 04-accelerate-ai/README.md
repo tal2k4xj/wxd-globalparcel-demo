@@ -262,6 +262,7 @@ Host/API URLs and Docker bridge settings: **[delivery driver notes](../03-realti
 With the ops API running from `03-realtime-operations/` (`uvicorn apps.api:app … --port 8081`) and OpenSearch indexed:
 
 1. Import `tools/langflow/parcel_opensearch_customer.json` at [http://localhost:7861](http://localhost:7861) (optional: test playground with `PCL-LIVE-000001`)
+   - On macOS (Podman or Docker Desktop), open the **API Request** node and change the URL host `172.17.0.1` to `host.docker.internal`.
 2. Click "Share → MCP Server" and ensure "PARCEL_OPENSEARCH_CUSTOMER" is set under `Flows/Tools`.
 3. Click JSON to understand how to call the MCP server. Make note of the `projectid` inside the `args` sections, as you'll need it below
 

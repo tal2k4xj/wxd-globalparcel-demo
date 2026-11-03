@@ -26,8 +26,9 @@ pip install -r requirements.txt
 ### 1. Capture — put Global Parcel in motion
 
 ```bash
-# When watsonx.data (Kind) must reach this broker, advertise a host IP Kind can route to:
-export KAFKA_HOST_IP=$(ipconfig getifaddr en0)            # macOS; on Linux: $(hostname -I | awk '{print $1}')
+# watsonx.data (Kind) reaches Kafka on :9094. macOS/Podman needs nothing: the compose default
+# 192.168.127.254 is the Podman machine's fixed host gateway, so Wi-Fi/VPN changes don't break it.
+# Linux only: export KAFKA_KIND_HOST=$(hostname -I | awk '{print $1}')
 export PODMAN_COMPOSE_WARNING_LOGS=false                  # hide podman-compose's provider banner
 podman compose up -d
 podman compose ps

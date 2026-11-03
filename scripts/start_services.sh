@@ -121,15 +121,15 @@ pip install -q -r "${COMPOSE_DIR}/requirements.txt"
 ok "01 requirements installed"
 
 # --- 01 Compose ---------------------------------------------------------------
-if [[ -z "${KAFKA_HOST_IP:-}" ]]; then
-  # Linux: hostname -I; macOS: primary interface address.
-  KAFKA_HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
-  [[ -n "$KAFKA_HOST_IP" ]] || KAFKA_HOST_IP="$(ipconfig getifaddr en0 2>/dev/null || true)"
-  KAFKA_HOST_IP="${KAFKA_HOST_IP:-localhost}"
-  export KAFKA_HOST_IP
+# Address watsonx.data (Kind) dials for Kafka on :9094. macOS keeps the compose
+# default (the Podman machine's fixed host gateway, immune to Wi-Fi changes);
+# Linux has no Podman machine, so advertise the host IP.
+if [[ -z "${KAFKA_KIND_HOST:-}" && "$(uname -s)" == "Linux" ]]; then
+  KAFKA_KIND_HOST="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  export KAFKA_KIND_HOST
 fi
 
-note "== 01 StreamHouse Compose (KAFKA_HOST_IP=${KAFKA_HOST_IP}) =="
+note "== 01 StreamHouse Compose (Kafka for watsonx.data: ${KAFKA_KIND_HOST:-192.168.127.254}:9094) =="
 (
   cd "$COMPOSE_DIR"
   podman compose up -d
@@ -332,7 +332,7 @@ Workshop services 01–04 (install-if-needed + start; stream data pruned)
   OpenSearch               http://localhost:9200
   OpenSearch Dashboards    http://localhost:5601
   Cassandra                localhost:9042
-  Kafka                    localhost:9092  (advertised ${KAFKA_HOST_IP}:9092)
+  Kafka                    localhost:9092  (watsonx.data: ${KAFKA_KIND_HOST:-192.168.127.254}:9094)
   Control tower (01)       http://localhost:8088/tower/
   Ops apps (03)            http://localhost:8081/customer-ui/  |  /audit-ui/
   watsonx.data UI (02)     ${wxd_ui}

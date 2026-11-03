@@ -245,8 +245,8 @@ Register that broker as a watsonx.data catalog so Presto can JOIN Iceberg histor
 1. Navigate to **Infrastructure manager → Add component → Apache Kafka**.
 2. Fields:
    - Display name: `kafka-01`
-   - Hostname: run `ipconfig getifaddr en0` on macOS (`hostname -I | awk '{print $1}'` on Linux) — the same `KAFKA_HOST_IP` you set when you started compose
-   - Port: `9092`
+   - Hostname: `192.168.127.254` on macOS/Podman (the Podman machine's fixed host gateway); on Linux, the `KAFKA_KIND_HOST` you set when you started compose (`hostname -I | awk '{print $1}'`)
+   - Port: `9094` (the listener for watsonx.data; host apps stay on `localhost:9092`)
    - SASL: off (PLAINTEXT, no username or password)
 3. Click **Test connection**.
 4. Check **Associate catalog**:

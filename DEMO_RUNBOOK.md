@@ -80,17 +80,20 @@ status:OUT_FOR_DELIVERY and sla_risk:true
 
 ## 6. watsonx Orchestrate — ask the business
 - Chat: http://localhost:3000/chat-lite → agent **Global Parcel Assistant**
+- Langflow tool (for technical audiences): http://localhost:7861 → **Parcel OpenSearch Customer**
 
 Deep dive on one parcel:
 1. `What is the latest status of PCL-LIVE-000001?`
 2. `Show me its full journey, hub by hub.`
 3. `What did the drivers note along the way?`
 4. `The customer says it was never delivered. Is that true? Give me the evidence.`
+5. `Check what the customer tracking page shows and what the ledger says for PCL-LIVE-000001. Do they agree?` (Langflow → OpenSearch, then Cassandra)
+6. Real mismatch: freeze the index (step 4), wait 30 s, then ask question 5 about a parcel that is still moving.
 
 Real time: get the parcel that hit a weather delay a few seconds ago.
 ```bash
 curl -s 'localhost:9200/parcel-events-live/_search' -H 'content-type: application/json' -d '{"size":1,"sort":[{"event_ts":"desc"}],"query":{"term":{"exception_code":"WX_DELAY"}},"_source":["parcel_id","hub_code","event_ts"]}' | grep -o '"_source":{[^}]*}'
 ```
-5. `Why is <PARCEL_ID> delayed, and should we warn the customer?` (quotes the driver note written seconds ago)
-6. A minute later: `What's the status of <PARCEL_ID> now?` (the answer has moved on)
-7. Show the same parcel in Kafka UI (search by key) and in the audit UI.
+7. `Why is <PARCEL_ID> delayed, and should we warn the customer?` (quotes the driver note written seconds ago)
+8. A minute later: `What's the status of <PARCEL_ID> now?` (the answer has moved on)
+9. Show the same parcel in Kafka UI (search by key) and in the audit UI.
