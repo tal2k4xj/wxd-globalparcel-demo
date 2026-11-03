@@ -5,7 +5,7 @@ One FastAPI process on `:8081` serves JSON **and** the UIs. `app.mount(...)` in 
 | URL | Mounted from | Reads |
 | --- | --- | --- |
 | http://localhost:8081/customer-ui/ | `apps/frontend/customer-tracking` | **OpenSearch** |
-| http://localhost:8081/audit-ui/ | `apps/frontend/audit-reconciliation` | **Cassandra** |
+| http://localhost:8081/audit-ui/ | `apps/frontend/audit-reconciliation` | **Cassandra** (timeline) + **OpenSearch** (customer status, notes search) |
 
 `/` redirects to `/customer-ui/`.
 

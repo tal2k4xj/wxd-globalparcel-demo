@@ -50,12 +50,16 @@ OS_INDEX_BODY = {
             "event_ts": {"type": "date"},
             "status": {"type": "keyword"},
             "hub_code": {"type": "keyword"},
+            "hub_city": {"type": "text", "fields": {"raw": {"type": "keyword"}}},
             "region": {"type": "keyword"},
             "exception_code": {"type": "keyword"},
             "customer_eta": {"type": "date"},
             "geo_position": {"type": "geo_point"},
             "sla_risk": {"type": "boolean"},
             "invoice_total": {"type": "float"},
+            # Full-text for ops search (english stemming: "delays" matches "delay").
+            # The customer API never returns it.
+            "delivery_note": {"type": "text", "analyzer": "english"},
         }
     },
 }
@@ -101,6 +105,12 @@ def connect_opensearch(retries: int = 30) -> OpenSearch:
             client.info()
             if not client.indices.exists(index=OPENSEARCH_INDEX):
                 client.indices.create(index=OPENSEARCH_INDEX, body=OS_INDEX_BODY)
+            else:
+                # Older indexes predate the text fields; adding fields to a mapping is allowed.
+                try:
+                    client.indices.put_mapping(index=OPENSEARCH_INDEX, body=OS_INDEX_BODY["mappings"])
+                except Exception as exc:
+                    print(f"OpenSearch mapping not updated ({exc}); recreate the index to enable text search.")
             return client
         except Exception as exc:
             last = exc
@@ -126,19 +136,26 @@ def write_cassandra(session: Any, prepared: PreparedStatement, event: dict[str, 
     )
 
 
-def write_opensearch(client: OpenSearch, event: dict[str, Any]) -> None:
+def opensearch_doc(event: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """One scan as an OpenSearch document; the id makes a replay overwrite, not duplicate."""
     event_ts = event.get("event_ts")
     doc = {
         "parcel_id": event["parcel_id"],
         "event_ts": event_ts,
         "status": event.get("status"),
         "hub_code": event.get("hub_code"),
+        "hub_city": event.get("hub_city"),
         "region": event.get("region"),
         "exception_code": event.get("exception_code") or "",
+        "delivery_note": event.get("delivery_note") or "",
         "customer_eta": event.get("customer_eta"),
         "geo_position": {"lat": event.get("latitude"), "lon": event.get("longitude")},
         "sla_risk": bool(event.get("sla_risk")),
         "invoice_total": event.get("invoice_total"),
     }
-    doc_id = f"{event['parcel_id']}:{event_ts}"
+    return f"{event['parcel_id']}:{event_ts}", doc
+
+
+def write_opensearch(client: OpenSearch, event: dict[str, Any]) -> None:
+    doc_id, doc = opensearch_doc(event)
     client.index(index=OPENSEARCH_INDEX, id=doc_id, body=doc, refresh=False)

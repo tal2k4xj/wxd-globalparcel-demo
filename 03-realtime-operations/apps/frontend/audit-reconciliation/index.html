@@ -23,6 +23,30 @@
         <div class="pill ok">Cassandra source: connected</div>
       </header>
 
+      <section class="card ops-search">
+        <h2>Ops search — driver notes (OpenSearch full-text)</h2>
+        <form id="searchForm" class="search-row">
+          <input id="searchQuery" placeholder='Try: weather delay frankfurt · "signed by recipient" chicago · concierge photo' />
+          <button type="submit">Search notes</button>
+        </form>
+        <div class="examples">
+          <span>Examples:</span>
+          <button type="button" class="chip" data-q="de-icing">de-icing</button>
+          <button type="button" class="chip" data-q="weather delays dubai">weather delays dubai</button>
+          <button type="button" class="chip" data-q='"signed by recipient" chicago'>"signed by recipient" chicago</button>
+          <button type="button" class="chip" data-q="concierge | front desk">concierge | front desk</button>
+          <button type="button" class="chip" data-q="aisha">aisha (driver)</button>
+        </div>
+        <p id="searchStats" class="muted"></p>
+        <div id="searchFacets" class="facets"></div>
+        <table id="searchTable" hidden>
+          <thead>
+            <tr><th>Parcel</th><th>Scan (UTC)</th><th>Status</th><th>Hub</th><th>Driver note</th></tr>
+          </thead>
+          <tbody id="searchRows"></tbody>
+        </table>
+      </section>
+
       <section class="search-card">
         <div class="field">
           <label for="parcelId">Parcel ID</label>
@@ -58,13 +82,13 @@
             </div>
             <div class="signal">
               <p>Index lag impact</p>
-              <strong class="warn">Likely</strong>
-              <small>Last indexed event older than Cassandra latest</small>
+              <strong id="lagSignal" class="warn">Likely</strong>
+              <small id="lagDetail">Last indexed event older than Cassandra latest</small>
             </div>
             <div class="signal">
               <p>Manual action</p>
-              <strong class="ok">Recommended</strong>
-              <small>Trigger customer notification refresh</small>
+              <strong id="actionSignal" class="ok">Recommended</strong>
+              <small id="actionDetail">Trigger customer notification refresh</small>
             </div>
           </div>
         </section>

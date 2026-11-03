@@ -105,7 +105,105 @@ async function loadAuditData() {
   document.getElementById("truthStatus").textContent = summary.cassandra_latest_status || "UNKNOWN";
   document.getElementById("reconResult").textContent = summary.reconciliation_result || "Unknown";
   document.getElementById("reconResult").className = summary.index_lag_suspected ? "warn" : "ok";
+  renderSignals(summary);
 }
+
+function setSignal(id, text, cls, detail) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = cls;
+  document.getElementById(id.replace("Signal", "Detail")).textContent = detail;
+}
+
+function renderSignals(summary) {
+  const notes = document.getElementById("auditNotes");
+  if (summary.customer_app_status === "UNAVAILABLE") {
+    setSignal("lagSignal", "Unknown", "warn", "OpenSearch did not answer");
+    setSignal("actionSignal", "Check index", "warn", "Customer view cannot be compared");
+    notes.value = "Customer index unreachable; reconcile once OpenSearch is back.";
+  } else if (summary.index_lag_suspected) {
+    setSignal("lagSignal", "Likely", "warn",
+      `Customer sees ${summary.customer_app_status} (${summary.customer_app_event_ts || "not indexed"}); ledger has ${summary.cassandra_latest_status} (${summary.cassandra_latest_event_ts})`);
+    setSignal("actionSignal", "Recommended", "warn", "Trigger customer notification refresh");
+    notes.value = `Source of truth shows ${summary.cassandra_latest_status}; customer-facing view still shows ${summary.customer_app_status} (index lag). Recommend push refresh and close ticket after acknowledgment.`;
+  } else {
+    setSignal("lagSignal", "None", "ok", `Customer view and ledger agree: ${summary.cassandra_latest_status}`);
+    setSignal("actionSignal", "None needed", "ok", "Use the ledger timeline as evidence");
+    notes.value = `Customer view and Cassandra ledger agree (${summary.cassandra_latest_status}). Close the dispute with the ledger timeline and driver note as evidence.`;
+  }
+}
+
+function cell(tr, text) {
+  const td = document.createElement("td");
+  td.textContent = text;
+  tr.appendChild(td);
+  return td;
+}
+
+async function runSearch(q) {
+  const stats = document.getElementById("searchStats");
+  const facets = document.getElementById("searchFacets");
+  const table = document.getElementById("searchTable");
+  const tbody = document.getElementById("searchRows");
+  document.getElementById("searchQuery").value = q;
+  if (!q.trim()) return;
+  stats.textContent = "Searching…";
+  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) {
+    stats.textContent = `Search failed (${res.status})`;
+    table.hidden = true;
+    facets.innerHTML = "";
+    return;
+  }
+  const data = await res.json();
+  stats.textContent = `${data.matching_scans.toLocaleString()} matching scans across ${data.matching_parcels.toLocaleString()} parcels in ${data.took_ms} ms — showing the best match per parcel. Click a row to audit it.`;
+  facets.innerHTML = "";
+  [["Hub", data.by_hub], ["Status", data.by_status]].forEach(([label, buckets]) => {
+    if (!buckets.length) return;
+    const row = document.createElement("div");
+    row.className = "facet-row";
+    const name = document.createElement("span");
+    name.textContent = `${label}:`;
+    row.appendChild(name);
+    buckets.forEach((b) => {
+      const tag = document.createElement("span");
+      tag.className = "facet";
+      tag.textContent = `${b.key} ${b.count.toLocaleString()}`;
+      row.appendChild(tag);
+    });
+    facets.appendChild(row);
+  });
+  tbody.innerHTML = "";
+  data.results.forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.className = "clickable";
+    cell(tr, r.parcel_id);
+    cell(tr, r.event_ts || "-");
+    cell(tr, r.status || "-").className = r.sla_risk ? "warn" : "";
+    cell(tr, `${r.hub_code || "-"} ${r.hub_city || ""}`);
+    // Highlight is HTML-encoded by OpenSearch (encoder: html); only <mark> tags are markup.
+    const note = document.createElement("td");
+    if (r.highlight) note.innerHTML = r.highlight;
+    else note.textContent = r.delivery_note || "-";
+    tr.appendChild(note);
+    tr.addEventListener("click", () => {
+      document.getElementById("parcelId").value = r.parcel_id;
+      loadAuditData();
+      document.querySelector(".search-card").scrollIntoView({ behavior: "smooth" });
+    });
+    tbody.appendChild(tr);
+  });
+  table.hidden = !data.results.length;
+}
+
+document.getElementById("searchForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  runSearch(document.getElementById("searchQuery").value);
+});
+
+document.querySelectorAll(".chip").forEach((chip) => {
+  chip.addEventListener("click", () => runSearch(chip.dataset.q));
+});
 
 document.getElementById("loadBtn").addEventListener("click", () => {
   loadAuditData();

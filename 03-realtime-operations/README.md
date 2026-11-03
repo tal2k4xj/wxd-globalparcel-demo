@@ -106,7 +106,41 @@ This dashboard is the **Cassandra source-of-truth read path** for dispute workfl
 3. Use the map + timeline; look for `WX_DELAY` and **delivery driver notes**.
 4. Close the dispute using Cassandra as the authoritative evidence trail.
 
-### 5. OpenSearch Dashboards 📊
+**Customer app status** is the newest scan OpenSearch serves for that parcel; **Cassandra latest status** is the newest ledger row. Normally they agree within about a second (OpenSearch refreshes every 1s), so the result reads *No mismatch*.
+
+#### Show real index lag
+
+Pause OpenSearch refresh so the customer view stops seeing new scans while the ledger keeps writing:
+
+```bash
+curl -s -XPUT localhost:9200/parcel-events-live/_settings -H 'content-type: application/json' \
+  -d '{"index":{"refresh_interval":"-1"}}'
+```
+
+Wait 30–60 seconds, then load a parcel that is still moving (pick one from the transform log `.run/shift_left.log`, or from the ops search below). The customer UI shows the older status and the audit view reports *Mismatch detected*. Restore refresh afterwards:
+
+```bash
+curl -s -XPUT localhost:9200/parcel-events-live/_settings -H 'content-type: application/json' \
+  -d '{"index":{"refresh_interval":"1s"}}'
+```
+
+### 5. Ops search — driver notes (full-text) 🔤
+
+The top of the audit view searches **driver notes and hub cities** in OpenSearch (`GET /api/search?q=…`). Same index the customer UI reads, a different kind of query:
+
+- **Full-text, not exact match:** notes use the `english` analyzer, so `weather delays` matches "weather delay"; city matches rank higher.
+- **Query syntax:** `"signed by recipient" chicago` (phrase), `concierge | front desk` (or), `delay -dubai` (exclude), `ramp*` (prefix).
+- **One row per parcel** (best-matching scan), plus counts by hub and status for everything that matched. Click a row to load that parcel's ledger timeline.
+
+This is classic lexical search (BM25), not vector search or RAG.
+
+Indexes created before driver notes were searchable lack the note on older scans. Kafka keeps every enriched scan, so replay it once to rebuild them (stops when it catches up; live scans are written by the transform):
+
+```bash
+PYTHONPATH=../01-streamhouse python scripts/backfill_opensearch.py
+```
+
+### 6. OpenSearch Dashboards 📊
 
 Dashboards is in chapter 01 Compose (`opensearch-dashboards` on `:5601`). Security is off — no login.
 
@@ -121,13 +155,14 @@ That saved object is an index pattern plus a saved search on `parcel-events-live
 
 ## Delivery driver notes
 
-**Delivery driver notes** are short field messages left at each scan. They live on the **Cassandra ledger**. Agents in the next chapter quote them for delays, disputes, or proof of delivery. The customer OpenSearch index exposes status and timeline only.
+**Delivery driver notes** are short field messages left at each scan. The **Cassandra ledger** keeps them as evidence; agents in the next chapter quote them for delays, disputes, or proof of delivery. OpenSearch indexes them as full-text for ops search, but the customer API never returns them.
 
 | Store | `delivery_note` |
 | --- | --- |
-| **Cassandra ledger** | Yes — every scan |
-| **OpenSearch** `parcel-events-live` | No |
-| **Audit UI** | Yes (timeline) |
+| **Cassandra ledger** | Yes — every scan (evidence) |
+| **OpenSearch** `parcel-events-live` | Yes — full-text, ops search only |
+| **Customer UI** | No |
+| **Audit UI** | Yes (timeline + ops search) |
 
 Example notes:
 

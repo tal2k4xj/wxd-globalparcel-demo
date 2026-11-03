@@ -148,19 +148,113 @@ def get_audit(parcel_id: str) -> dict[str, Any]:
     ]
 
     latest = timeline[0]
-    app_status = timeline[1]["status"] if len(timeline) > 1 else latest["status"]
-    mismatch = app_status != latest["status"]
+    # What the customer sees right now: the newest searchable scan in OpenSearch.
+    customer = latest_customer_scan(parcel_id.strip().upper())
+    if customer is None:
+        app_status = "UNAVAILABLE"
+        result = "Customer index unavailable"
+        mismatch = False
+    else:
+        app_status = customer.get("status") or "NOT_INDEXED"
+        mismatch = app_status != latest["status"]
+        result = "Mismatch detected" if mismatch else "No mismatch"
 
     return {
         "parcel_id": parcel_id.strip().upper(),
         "summary": {
             "customer_claim": 'Customer says "Not delivered"',
             "customer_app_status": app_status,
+            "customer_app_event_ts": (customer or {}).get("event_ts"),
             "cassandra_latest_status": latest["status"],
-            "reconciliation_result": "Mismatch detected" if mismatch else "No mismatch",
+            "cassandra_latest_event_ts": latest["event_ts"],
+            "reconciliation_result": result,
             "index_lag_suspected": mismatch,
         },
         "timeline": timeline,
+    }
+
+
+def latest_customer_scan(parcel_id: str) -> dict[str, Any] | None:
+    """Newest scan OpenSearch serves for this parcel; {} if none indexed, None if unreachable."""
+    if not ensure_opensearch():
+        return None
+    try:
+        result = os_client.search(
+            index=OPENSEARCH_INDEX,
+            body={
+                "size": 1,
+                "sort": [{"event_ts": {"order": "desc"}}],
+                "query": {"term": {"parcel_id": parcel_id}},
+                "_source": ["status", "event_ts"],
+            },
+        )
+    except Exception:
+        return None
+    hits = result.get("hits", {}).get("hits", [])
+    return hits[0]["_source"] if hits else {}
+
+
+@app.get("/api/search")
+def search_notes(q: str, size: int = 20) -> dict[str, Any]:
+    """Ops full-text search over driver notes and hub cities (OpenSearch).
+
+    simple_query_string keeps the syntax forgiving: "exact phrase", -exclude,
+    a|b, and a trailing * for prefixes. Results collapse to one hit per parcel
+    (its best-matching scan); aggregations show where the matches cluster.
+    """
+    if not ensure_opensearch():
+        raise HTTPException(status_code=503, detail="OpenSearch client not ready")
+    q = q.strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="Empty query")
+
+    body = {
+        "size": max(1, min(size, 50)),
+        "query": {
+            "simple_query_string": {
+                "query": q,
+                "fields": ["delivery_note", "hub_city^2"],
+                "default_operator": "and",
+            }
+        },
+        "collapse": {"field": "parcel_id"},
+        "sort": ["_score", {"event_ts": {"order": "desc"}}],
+        "highlight": {
+            "encoder": "html",
+            "pre_tags": ["<mark>"],
+            "post_tags": ["</mark>"],
+            "fields": {"delivery_note": {"number_of_fragments": 0}},
+        },
+        "aggs": {
+            "parcels": {"cardinality": {"field": "parcel_id"}},
+            "by_hub": {"terms": {"field": "hub_code", "size": 12}},
+            "by_status": {"terms": {"field": "status", "size": 8}},
+        },
+        "track_total_hits": True,
+    }
+    result = os_client.search(index=OPENSEARCH_INDEX, body=body)
+    hits = result.get("hits", {})
+    aggs = result.get("aggregations", {})
+    return {
+        "query": q,
+        "matching_scans": hits.get("total", {}).get("value", 0),
+        "matching_parcels": aggs.get("parcels", {}).get("value", 0),
+        "took_ms": result.get("took"),
+        "by_hub": [{"key": b["key"], "count": b["doc_count"]} for b in aggs.get("by_hub", {}).get("buckets", [])],
+        "by_status": [{"key": b["key"], "count": b["doc_count"]} for b in aggs.get("by_status", {}).get("buckets", [])],
+        "results": [
+            {
+                "parcel_id": h["_source"].get("parcel_id"),
+                "event_ts": h["_source"].get("event_ts"),
+                "status": h["_source"].get("status"),
+                "hub_code": h["_source"].get("hub_code"),
+                "hub_city": h["_source"].get("hub_city"),
+                "sla_risk": h["_source"].get("sla_risk"),
+                "delivery_note": h["_source"].get("delivery_note") or "",
+                "highlight": (h.get("highlight", {}).get("delivery_note") or [""])[0],
+            }
+            for h in hits.get("hits", [])
+        ],
     }
 
 
